@@ -29,11 +29,19 @@ except Exception as e:
 
 # Initialize Google Sheets client from Streamlit Secrets
 try:
-    # --- FIX: Use the more robust, direct Google authentication method ---
-    # Read the JSON content as a single string from secrets
-    creds_json_str = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
-    # Parse the string into a Python dictionary
-    creds_dict = json.loads(creds_json_str)
+    # --- FIX: Use individual secret values instead of parsing JSON string ---
+    creds_dict = {
+        "type": st.secrets["gcp_service_account"]["type"],
+        "project_id": st.secrets["gcp_service_account"]["project_id"],
+        "private_key_id": st.secrets["gcp_service_account"]["private_key_id"],
+        "private_key": st.secrets["gcp_service_account"]["private_key"],
+        "client_email": st.secrets["gcp_service_account"]["client_email"],
+        "client_id": st.secrets["gcp_service_account"]["client_id"],
+        "auth_uri": st.secrets["gcp_service_account"]["auth_uri"],
+        "token_uri": st.secrets["gcp_service_account"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["gcp_service_account"]["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["gcp_service_account"]["client_x509_cert_url"]
+    }
     
     # Create credentials using the official Google library
     credentials = service_account.Credentials.from_service_account_info(
