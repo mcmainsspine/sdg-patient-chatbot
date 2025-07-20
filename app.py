@@ -1,5 +1,5 @@
 # SDG Spine Surgery Patient Assistant v3.2
-# Web Application powered by Streamlit (with Reset Button)
+# Final Deployment Code for Streamlit Community Cloud
 
 import streamlit as st
 import pandas as pd
@@ -16,23 +16,30 @@ st.set_page_config(
 )
 
 # --- AUTHENTICATION & CLIENT SETUP ---
-# Initialize Groq client
+# Initialize Groq client from Streamlit Secrets
 try:
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
     GROQ_API_AVAILABLE = True
 except Exception as e:
-    st.error("Groq API key is not configured correctly. Please check your secrets.toml file.")
+    st.error("Groq API key is not configured correctly. Please check your app's Secrets settings.")
     GROQ_API_AVAILABLE = False
 
-# Initialize Google Sheets client
+# Initialize Google Sheets client from Streamlit Secrets
 try:
-    KEY_FILE_NAME = "patient-chatbot-logger-0721c5b81cdb.json" # IMPORTANT: Make sure this name is correct
-    KEY_FILE_PATH = f".streamlit/{KEY_FILE_NAME}"
-    gc = gspread.service_account(filename=KEY_FILE_PATH)
+    # Read the JSON content as a single string from secrets
+    creds_json_str = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
+    # Parse the string into a Python dictionary
+    creds_dict = json.loads(creds_json_str)
+    
+    # Manually format the private key to handle newline characters correctly
+    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    
+    gc = gspread.service_account_from_dict(creds_dict)
+    # Open the Google Sheet by its name
     log_sheet = gc.open("SDG_Chatbot_Log").sheet1
     GSHEETS_AVAILABLE = True
 except Exception as e:
-    st.error(f"Google Sheets connection failed. Please check your credentials, sheet name, and key file. Error: {e}")
+    st.error(f"Google Sheets connection failed. Please check your app's Secrets settings and sheet name. Error: {e}")
     GSHEETS_AVAILABLE = False
 
 # --- DATA LOADING ---
@@ -43,7 +50,7 @@ def load_data(csv_path):
         df['Alternate_Questions'] = df['Alternate_Questions'].fillna('')
         return df
     except FileNotFoundError:
-        st.error(f"The protocol file ('combined_protocols.csv') was not found. Please make sure it's in the same folder as the app.")
+        st.error(f"The protocol file ('combined_protocols.csv') was not found in the GitHub repository.")
         return None
 
 master_df = load_data("combined_protocols.csv")
@@ -105,13 +112,11 @@ def get_model_response(prompt_text):
 
 st.title("SDG Spine Surgery Patient Assistant")
 
-# Initialize session state for conversation history and surgery type
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "surgery_type" not in st.session_state:
     st.session_state.surgery_type = None
 
-# Step 1: Ask for surgery type if not already selected
 if st.session_state.surgery_type is None:
     st.info("Welcome! To provide the most accurate information, please select your surgery type below.")
     
@@ -121,40 +126,29 @@ if st.session_state.surgery_type is None:
 
         if selected_surgery:
             st.session_state.surgery_type = selected_surgery
-            # Filter and reset the index for the chosen protocol
             st.session_state.session_df = master_df[master_df['SurgeryType'] == selected_surgery].copy().reset_index(drop=True)
-            # Rerun the script to move to the chat interface
             st.rerun()
     else:
         st.error("Protocol data could not be loaded. The app cannot continue.")
 
-# Step 2: Display the chat interface if surgery type is selected
 else:
-    # --- NEW: Add a sidebar with a reset button ---
     st.sidebar.title("Options")
     if st.sidebar.button("Change Surgery / Start Over"):
-        # Reset the session state variables
         st.session_state.surgery_type = None
         st.session_state.messages = []
-        # Rerun the app to go back to the selection screen
         st.rerun()
 
     st.success(f"Protocol for **{st.session_state.surgery_type.upper()}** is loaded. How can I help you?")
 
-    # Display chat messages from history
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Accept user input
     if prompt := st.chat_input("Ask a question about your surgery..."):
-        # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
-        # Display user message in chat message container
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Generate and display assistant response
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 protocol_context = find_relevant_info(prompt, st.session_state.session_df)
@@ -169,5 +163,4 @@ else:
                 response = get_model_response(final_prompt)
                 st.markdown(response)
         
-        # Add assistant response to chat history
         st.session_state.messages.append({"role": "assistant", "content": response})
