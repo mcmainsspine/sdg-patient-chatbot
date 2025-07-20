@@ -1,5 +1,5 @@
-# SDG Spine Surgery Patient Assistant v3.2
-# Final Deployment Code for Streamlit Community Cloud
+# SDG Spine Surgery Patient Assistant v3.3
+# Web Application powered by Streamlit (Robust Auth Fix)
 
 import streamlit as st
 import pandas as pd
@@ -7,6 +7,9 @@ import datetime
 from groq import Groq
 import gspread
 import json
+
+# --- NEW: Import the official Google Auth library ---
+from google.oauth2 import service_account
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -26,15 +29,24 @@ except Exception as e:
 
 # Initialize Google Sheets client from Streamlit Secrets
 try:
+    # --- FIX: Use the more robust, direct Google authentication method ---
     # Read the JSON content as a single string from secrets
     creds_json_str = st.secrets["GCP_SERVICE_ACCOUNT_JSON"]
     # Parse the string into a Python dictionary
     creds_dict = json.loads(creds_json_str)
     
-    # Manually format the private key to handle newline characters correctly
-    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    # Create credentials using the official Google library
+    credentials = service_account.Credentials.from_service_account_info(
+        creds_dict,
+        scopes = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
+    )
     
-    gc = gspread.service_account_from_dict(creds_dict)
+    # Authorize gspread with the new credentials
+    gc = gspread.Client(auth=credentials)
+
     # Open the Google Sheet by its name
     log_sheet = gc.open("SDG_Chatbot_Log").sheet1
     GSHEETS_AVAILABLE = True
